@@ -1,0 +1,107 @@
+---
+title: "Assignment 3"
+author: "Kundan Kumar"
+date: "2024-03-11"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+###question 4
+
+# Define the function to update theta
+update_theta <- function(n, Y, Q, N, m) {
+  theta <- rbeta(n, Y + exp(m) * Q, N - Y + exp(m) * (1 - Q))
+  return(theta)
+}
+
+# Define the function to update m
+update_m <- function() {
+  m <- rnorm(1, 0, 10)
+  return(m)
+}
+
+# MCMC algorithm
+run_MCMC <- function(n, Y, Q, N, m_init, theta_init, iters) {
+  # Chain initiation
+  m <- m_init
+  theta <- theta_init
+  
+  # Define chains
+  m_chain <- rep(NA, iters)
+  theta_chain <- matrix(NA, iters, n)
+  
+  # Start MCMC
+  for (i in 1:iters) {
+    m <- update_m()
+    theta <- update_theta(n, Y, Q, N, m)
+    m_chain[i] <- m
+    theta_chain[i,] <- theta
+  }
+  
+  # Return chains
+  output <- list(m_chain = m_chain,
+                 theta_chain = theta_chain)
+  return(output)
+}
+
+# Data
+n <- 10
+Q <- c(0.845, 0.847, 0.880, 0.674, 0.909, 0.898, 0.770, 0.801, 0.802, 0.875)
+Y <- c(64, 72, 55, 27, 75, 24, 28, 66, 40, 13)
+X <- c(75, 95, 63, 39, 83, 26, 41, 82, 54, 16)
+N <- Y + X
+
+# Run MCMC
+MCMC_results <- run_MCMC(n = n, Y = Y, Q = Q, N = N, 
+                         m_init = 0, 
+                         theta_init = 1 - var(Y) / mean(Y), 
+                         iters = 30000)
+
+# Plot chains
+plot(MCMC_results$m_chain, xlab = "Iteration", ylab = "m", type = "l")
+plot(MCMC_results$theta_chain[, 1], xlab = "Iteration", ylab = "theta1", type = "l")
+
+# Compute credible intervals
+cred_intervals <- matrix(NA, 2, 11)
+for (i in 1:10) {
+  cred_intervals[, i] <- quantile(MCMC_results$theta_chain[, i], c(0.025, 0.975))
+}
+cred_intervals[, 11] <- quantile(MCMC_results$m_chain, c(0.025, 0.975))
+
+# JAGS fitting
+library(rjags)
+
+data <- list(Y = Y, Q = Q, N = N, n = n)
+
+model_string <- "
+model{
+  # Likelihood
+  for(i in 1:n){
+    Y[i] ~ dbin(theta[i], N[i])
+  }
+
+  # Priors
+  for(i in 1:n){
+    theta[i] ~ dbeta(exp(m) * Q[i], exp(m) * (1 - Q[i]))
+  }
+  m ~ dnorm(0, 10)
+}"
+
+model <- jags.model(textConnection(model_string), data = data,
+                    n.chains = 2, quiet = TRUE)
+
+update(model, 10000, progress.bar = "none")
+
+samples_theta <- coda.samples(model, variable.names = "theta", 
+                              n.iter = 30000, thin = 2, progress.bar = "none")
+samples_m <- coda.samples(model, variable.names = "m", 
+                          n.iter = 30000, thin = 2, progress.bar = "none")
+
+summary(samples_theta)[2]
+plot(samples_theta[, 1])
+summary(samples_m)[2]
+```
