@@ -1,0 +1,49 @@
+---
+title: "Assignment"
+author: "Kundan Kumar"
+date: "2024-01-31"
+output: pdf_document
+---
+#question 1
+```{r}
+p <- 0.5  
+N_values <- c(10, 50, 500)  
+
+calculate_ks_distance <- function(N) {
+ 
+  Y <- rbinom(1000, N, p)
+  
+  
+  cdf_Y <- ecdf(Y)
+  
+  
+  clt_samples <- replicate(1000, sum(rbinom(N, 1, p)) - N*p)
+  
+  cdf_CLT <- ecdf(clt_samples)
+  
+  ks_distance <- ks.test(Y, clt_samples)$statistic
+  
+  return(ks_distance)
+}
+
+ks_distances <- sapply(N_values, calculate_ks_distance)
+
+for (i in seq_along(N_values)) {
+  cat("KS Distance for N =", N_values[i], ":", ks_distances[i], "\n")
+}
+```
+
+
+#question 3
+```{r}
+integration<-function(x)
+{
+  root_x = 2*sqrt(x)
+  bessel<-2*besselK(root_x, nu = 0)
+  return(bessel)
+}
+
+integrate(integration,0,Inf)
+```
+
+
