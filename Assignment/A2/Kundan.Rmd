@@ -1,0 +1,85 @@
+---
+title: "Assignment2"
+author: "Kundan Kumar"
+date: "2024-02-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+#question2
+
+#  parameters
+true_mean_1 <- 1
+true_mean_2 <- 1.5
+sample_size_x <- 25
+sample_size_y <- 30
+standard_deviation <- 2
+prior_shape <- 0.1
+prior_rate <- 0.1
+large_c <- 10000
+total_shape <- sample_size_x + sample_size_y + 1
+
+
+rate_parameter <- (((sum((X - true_mean_1)^2) / 2) + (sum((X - true_mean_2)^2) / 2) + ((true_mean_1 - true_mean_2)^2) / (4 * large_c) + prior_rate))
+
+#  posterior distribution
+posterior_function <- function(std) {
+  s <- std^2
+  return((s^(-total_shape - 1)) * exp(-rate_parameter / s))
+}
+
+# Calculating kernel density using numerical integration
+kernel_density_result <- integrate(posterior_function, 0, Inf)
+
+# kernel density result
+cat("Kernel Density:", kernel_density_result$value, "\n")
+
+
+
+
+
+
+#question 3
+
+
+#parameters
+sample_size_x <- 10
+sample_size_y <- 15
+lambda_1_true <- 2
+lambda_2_true <- 2.5
+prior_shape <- 0.1
+prior_rate <- 0.1
+confidence_level <- 0.95
+
+# Simulate data
+X <- rpois(sample_size_x, lambda_1_true)
+Y <- rpois(sample_size_y, lambda_2_true)
+
+
+alpha <- prior_shape + sum(X)
+beta <- prior_rate + sum(Y)
+
+#samples from the posterior distribution of U = lambda_1 / (lambda_1 + lambda_2)
+U <- rbeta(1e4, alpha, beta)
+
+# Plot the density of U
+plot(density(U), main = "Density Plot of U")
+
+#mean of U
+mean_U <- mean(U)
+cat("Mean of U:", mean_U, "\n")
+
+# Calculate 95% HPD Credible Interval for U
+lower_quantile <- qbeta((1 - confidence_level) / 2, alpha, beta)
+upper_quantile <- qbeta(confidence_level / 2, alpha, beta)
+cat("95% HPD Credible Interval for U:", lower_quantile, "to", upper_quantile, "\n")
+
+# Calculate the probability that theta = 1/2
+p <- dbeta(0.5, alpha, beta)
+
+# Comparing the probability with the confidence level
+p_significance <- p > confidence_level
+cat("Probability that theta = 1/2 is greater than the confidence level:", p_significance,"\n")
+```
+
