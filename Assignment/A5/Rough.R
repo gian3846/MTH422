@@ -1,0 +1,386 @@
+#Question 1
+library(rjags)
+
+# Load the data
+library(geoR)
+
+gambia
+
+Y<-gambia$pos
+X<-gambia[,4:8]
+X<-scale(X)
+
+
+# Fit logistic model
+model <- textConnection("model{
+ for(i in 1:n){
+  Y[i] ~ dbern(pi[i])
+  logit(pi[i]) <- beta[1] + X[i,1]*beta[2] +
+                  X[i,2]*beta[3] + X[i,3]*beta[4] +
+                  X[i,4]*beta[5] + X[i,5]*beta[6]
+ }
+ for(j in 1:6){beta[j] ~ dnorm(0,0.01)}
+}")
+
+
+data  <- list(Y=Y,X=X,n=length(Y))
+model <- jags.model(model,data = data, n.chains=2,quiet=F)
+update(model, 5000, progress.bar="text")
+params<-c("beta[1]","beta[2]","beta[3]","beta[4]","beta[5]","beta[6]")
+samps<-coda.samples(model,variable.names=params,
+                    n.iter=20000,thin=5,progress.bar="text")
+
+plot(samps[1][,1])
+plot(samps[1][,2])
+plot(samps[1][,3])
+plot(samps[1][,4])
+plot(samps[1][,5])
+plot(samps[1][,6])
+
+library(coda)
+autocorr.plot(samps[[1]])
+autocorr(samps[[1]], lag = 1)
+
+
+# high ESS indicates convergence
+effectiveSize(samps)
+
+# R less than 1.1 indicates convergence
+gelman.diag(samps)
+
+# /z/ less than 2 indicates convergence
+geweke.diag(samps[[1]])
+
+
+
+s = c(1)
+cnt = 1
+
+for(i in 2:length(gambia$x)){
+  if(gambia$x[i]!=gambia$x[i-1]){
+    cnt = cnt+1
+  }
+  s = c(s , cnt)
+}
+
+
+
+
+Y <- gambia$pos
+
+
+X = gambia[ 1:length(gambia$pos) , -3]
+
+
+data = list( Y = Y , X = X , n = length(Y) , p = dim(X)[2] , s = s)
+
+
+
+model_string <- textConnection("model {
+  
+#Logistic regression 
+
+for(i in 1:n){ 
+ Y[i] ~ dbern(q[i]) 
+ logit(q[i])<-inprod(X[i,],beta[])  + alpha[s[i]]
+} 
+
+for(j in 1:65){
+alpha[j] ~ dnorm(0 , tau_sq_inv)
+}
+
+for(j in 1:p){beta[j] ~ dnorm(0,0.01)}
+tau_sq_inv ~ dgamma(0.1,0.1)
+    
+}")
+
+inits <- list( beta = rep( 0 , 7)  , tau_sq = rnorm(1))
+model <- jags.model(model_string, data = data, inits = inits, n.chains=2)
+
+#(3)Burn-in for 10000 samples 
+update(model, 10000, progress.bar="none")
+
+
+
+samples <- coda.samples(
+  model,
+  variable.names = c( "beta" , "tau_sq"),
+  n.iter = 20000,
+  progress.bar = "none"
+)
+
+summary(samples)
+
+
+plot(samples)
+#Question 2
+#Question 2
+library (MASS)
+data("galaxies")
+Y = galaxies
+hist(Y, breaks = 25)
+n = length(Y)
+
+data= list(Y = Y, N=n, K = 3, alpha = rep(1, 3))
+
+library(rjags)
+model_string = textConnection("model{
+
+# Likelihood
+for (i in 1:N) {
+Y[i] ~ dnorm(mu[Z[i]], tau[Z[i]])
+
+Z[i] ~ dcat(theta[])
+}
+
+for (j in 1:K) {
+mu[j]~ dnorm(0, 1e-8) 
+tau[j]~ dgamma (0.01, 0.01)
+}
+theta[1:K] ~ ddirch(alpha[])
+}")
+
+
+
+params = c('mu', 'tau', 'theta')
+
+model =  jags.model(model_string, data =data, quiet = TRUE)
+update(model, 2e4)
+
+samples = coda.samples (model, variable.names = params, n.iter = 1e4) 
+plot(samples[[1]][,1])
+plot(samples[[1]][,2])
+plot(samples[[1]][,3])
+
+y = seq(5e3, 4e4, 100)
+
+mu.post = samples[[1]][,1:3]
+
+tau.post = samples[[1]][,4:6]
+
+theta.post = samples[[1]][,7:9]
+
+S = 1e4
+
+post_density = matrix (NA, nrow = S, ncol = 351)
+
+for(i in 1:S) {
+  mu = as.numeric(mu.post[i,])
+  sigma = as.numeric(1/ sqrt(tau.post[i,]))
+  theta = as.numeric(theta.post[i, ])
+  
+  
+  
+  mix_gauss = function(x) {
+    
+    theta [1] * dnorm(x, mean = mu[1], sd =sigma[1])
+    +
+      theta [2] * dnorm(x, mean = mu[2], sd = sigma[2]) + 
+      theta[3] * dnorm(x, mean = mu[3], sd = sigma[3]) }
+  
+  post_density[i, ] <- sapply(y, mix_gauss)
+  
+  print(paste0('Done:', i))
+}
+
+post_median <- apply(post_density, 2, median)
+post_2.5.quantile <- apply(post_density, 2, quantile, probs = 0.025)
+post_97.5.quantile <- apply(post_density, 2, quantile, probs =  0.975)
+
+par(mfrow = c(1,1))
+
+
+library(ggplot2)
+
+ggplot()+
+  geom_histogram(aes(x = Y, y =after_stat(density)), col = 'black')+
+  geom_line(aes(y, post_median, col ='Median'), size = 1)+
+  geom_line(aes(y, post_2.5.quantile, col='Quantile: 0.025'), linetype = 'dashed',size = 1)+
+  geom_line(aes(y, post_97.5.quantile, col ='Quantile: 0.975'), linetype = 'dashed', size = 1)+
+  labs(col='Index')
+
+#Question 3
+set.seed(100)
+
+Y1<-563
+Y2<-10
+
+N1<-2820
+N2<-27
+
+Y<-c(Y1,Y2)
+N<-c(N1,N2)
+
+library(rjags)
+
+#M1
+model_string1<-"model{
+ #Likelihood
+ for(i in 1:length(N))
+ {
+  Y[i]~dpois(N[i]*lambda[i])
+ }
+ 
+ #Priors
+ c<-1
+ lambda1~dunif(0,c)
+ lambda2~dunif(0,c)
+ 
+ lambda<-c(lambda1, lambda2)
+ }"
+
+#M2
+model_string2<-"model{
+ #Likelihood
+ for(i in 1:length(N))
+ {
+  Y[i]~dpois(N[i]*lambda0)
+ }
+ 
+ #Priors
+ c<-1
+ lambda0~dunif(0,c)
+ lambda<-lambda0
+ }"
+
+data<-list(Y=Y,N=N)
+model1<-jags.model(textConnection(model_string1),
+                   data=data,n.chains=1,quiet=TRUE)
+update(model1,10000,progress.bar ="none")
+sample1<-coda.samples(model1,variable.names=c("lambda"),
+                      n.iter=20000,thin=5,progress.bar="none")
+lambda.m1<-sample1[[1]]
+
+model2<-jags.model(textConnection(model_string1),
+                   data=data,n.chains=1,quiet=TRUE)
+update(model1,10000,progress.bar ="none")
+sample2<-coda.samples(model2,variable.names=c("lambda"),
+                      n.iter=20000,thin=5,progress.bar="none")
+
+lambda.m2<-sample2[[1]]
+
+#after thinning,4Kpost-burn-insamplesleft
+loglike.m1<-sapply(1:4000,function(iter){
+  sum(dpois(Y1,lambda=lambda.m1[iter,1],log=T)+dpois(Y2,lambda.m1[iter,2],log=T))})
+loglike.m2<-sapply(1:4000,function(iter){
+  sum(dpois(Y1,lambda=lambda.m2[iter,1],log=T)+dpois(Y2,lambda.m2[iter,1],log=T))})
+
+deviance.m1<--2*loglike.m1
+deviance.m2<--2*loglike.m2
+#DIC
+Dbar.m1<-mean(deviance.m1)
+Dbar.m2<-mean(deviance.m2)
+
+D.thetahat.m1<-sum(dpois(Y1,lambda=mean(lambda.m1[,1]),log=T)+dpois(Y2,lambda=mean(lambda.m1[,2]),log=T))
+
+D.thetahat.m2<-sum(dpois(Y1,lambda=mean(lambda.m2[,1]),log=T)+dpois(Y2,lambda=mean(lambda.m2[,1]),log=T))
+
+pD.m1<-Dbar.m1-D.thetahat.m1
+pD.m2<-Dbar.m2-D.thetahat.m2
+DIC.m1<-pD.m1+Dbar.m1
+DIC.m2<-pD.m2+Dbar.m2
+DIC.m1
+DIC.m2
+
+
+#WAIC
+loglike1.m1<-sapply(1:4000,function(iter){
+  dpois(Y1,lambda=lambda.m1[iter,1],log=T)})
+loglike2.m1<-sapply(1:4000,function(iter){
+  dpois(Y2,lambda=lambda.m1[iter,2],log=T)})
+loglike1.m2<-sapply(1:4000,function(iter){
+  dpois(Y1,lambda=lambda.m2[iter,1],log=T)})
+loglike2.m2<-sapply(1:4000,function(iter){
+  +dpois(Y2,lambda.m2[iter,1],log=T)})
+
+posmeans.m1<-c(mean(loglike1.m1),mean(loglike2.m1))
+posmeans.m2<-c(mean(loglike1.m2),mean(loglike2.m2))
+posvars.m1<-c(var(loglike1.m1),var(loglike2.m1))
+posvars.m2<-c(var(loglike1.m2),var(loglike2.m2))
+pW.m1<-sum(posvars.m1)
+pW.m2<-sum(posvars.m2)
+sum.means.m1<-sum(posmeans.m1)
+sum.means.m2<-sum(posmeans.m2)
+WAIC.m1<--2*sum.means.m1+2 * pW.m1
+WAIC.m2<--2*sum.means.m2+2 * pW.m2
+WAIC.m1
+WAIC.m2
+
+OUT<-rbind(c(DIC.m1,WAIC.m1), c(DIC.m2,WAIC.m2))
+OUT<-round(OUT,2)
+rownames(OUT)<-c("Model1","Model2")
+colnames(OUT)<-c("DIC","WAIC")
+library(kableExtra)
+kable(OUT)
+
+#Question 4
+library(rjags)
+
+# Load the data
+library(geoR)
+
+gambia
+
+Y<-gambia$pos
+X<-gambia[,4:8]
+X<-scale(X)
+
+
+# Fit logistic model
+model <- textConnection("model{
+ for(i in 1:n){
+  Y[i] ~ dbern(pi[i])
+  logit(pi[i]) <- beta[1] + X[i,1]*beta[2] +
+                  X[i,2]*beta[3] + X[i,3]*beta[4] +
+                  X[i,4]*beta[5] + X[i,5]*beta[6]
+ }
+ for(j in 1:6){beta[j] ~ dnorm(0,0.01)}
+ 
+ for(i in 1:n){
+  Y2[i] ~ dbern(pi[i])
+  
+ }
+ 
+ D[1] <- min(Y2[])
+ D[2] <- mean(Y2[])
+ D[3] <- median(Y2[])
+ D[4] <- sd(Y2[])
+ D[5] <- max(Y2[])
+ 
+}")
+
+
+data  <- list(Y=Y,X=X,n=length(Y))
+model <- jags.model(model,data = data, n.chains=2,quiet=F)
+update(model, 5000, progress.bar="text")
+samps<-coda.samples(model,variable.names=c("D"),
+                    n.iter=20000,thin=5,progress.bar="text")
+plot(samps[1][,1])
+plot(samps[1][,2])
+plot(samps[1][,3])
+plot(samps[1][,4])
+plot(samps[1][,5])
+plot(samps[1][,6])
+
+
+D.m1<-samps[[1]]
+
+D0<-c(min(Y),mean(Y),sd(Y),max(Y))
+Dnames<-c("MinY","MeanY","SDY","MaxY")
+#Computetheteststatsforthemodels
+pval1<-pval2<-rep(NA,4)
+names(pval1)<-names(pval2)<-c("MinY","MeanY","SDY","MaxY")
+for(j in 1:4){
+  plot(density(D.m1[,j]),xlim=range(c(D0[j],D.m1[,j])),
+       xlab ="D",ylab="Posteriorprobability",
+       main =Dnames[j],ylim=c(0,3))
+  #lines(density(D.m2[,j]),col=2)
+  abline(v=D0[j],col=2)
+  legend("topleft",c("Logistic Regression","Data"),
+         lty=1,col=1:2,bty= "n")
+  pval1[j]<-mean(D.m1[,j]>D0[j])
+}
+
+print(pval1)
+
+
